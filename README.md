@@ -26,12 +26,19 @@ protocolos AODV, OLSR e DSDV em uma rede móvel Ad Hoc?
 | Aplicação | UDP de taxa constante, 4 fluxos simultâneos |
 | Pacotes | 1024 bytes de carga UDP, 20 pacotes/s por fluxo |
 | Tempo de simulação | 120 s (tráfego de 20 s a 110 s) |
-| Repetições | 5 por configuração (seed 12345, runs 1 a 5) |
-| Métricas | throughput, PDR, atraso médio fim a fim e jitter |
-| Variável adicional do grupo | quantidade de nós: 10, 20, 30 e 40 |
+| Repetições | 10 por configuração (seed 12345, runs 1 a 10) |
+| Métricas | throughput, PDR, atraso fim a fim (média, mediana e percentil 95) e jitter |
+| Variável adicional 1 | quantidade de nós: 10, 20, 30 e 40 (pausa 0 s) |
+| Variável adicional 2 | tempo de pausa do Random Waypoint: 0, 10, 30 e 60 s (20 nós) |
 
-Total: 3 protocolos × 4 velocidades × 5 repetições = **60 execuções** na etapa 1, mais
-**180 execuções** na etapa 2 (variável adicional) e 60 execuções de apoio (seção 8.5).
+Total: 3 protocolos × 4 velocidades × 10 repetições = **120 execuções** na etapa 1, mais
+**360 execuções** em cada variável adicional (etapas 2 e 3) e 120 execuções de apoio
+(seção 8.5): 960 simulações.
+
+**Versão 2 (outubro de 2026).** A primeira entrega usava 5 repetições. Com o prazo da
+apresentação ampliado, o experimento foi refeito com 10 repetições, ganhou a segunda
+variável adicional (tempo de pausa) e passou a registrar a mediana e o percentil 95 do
+atraso (seção 8.7). Os runs 1 a 5 produzem exatamente os mesmos números da versão 1.
 
 ## 2. Estrutura do repositório
 
@@ -46,9 +53,10 @@ manet-ns3/
 │   └── analyze.py              validação, estatísticas e gráficos
 ├── data/
 │   ├── raw/
-│   │   ├── base/               etapa 1: 60 CSVs + batch.log
-│   │   ├── extensao/           etapa 2: 180 CSVs + batch.log
-│   │   └── apoio_arp_padrao/   apoio: 60 CSVs + batch.log
+│   │   ├── base/               etapa 1: 120 CSVs + batch.log
+│   │   ├── extensao_nos/       etapa 2: 360 CSVs + batch.log
+│   │   ├── extensao_pausa/     etapa 3: 360 CSVs + batch.log
+│   │   └── apoio_arp_padrao/   apoio: 120 CSVs + batch.log
 │   └── processed/              tabelas geradas por analyze.py
 ├── figures/                    gráficos em PNG (300 dpi) e PDF (vetorial)
 └── article/                    artigo no modelo SBC
@@ -83,7 +91,7 @@ sudo apt update
 sudo apt install -y g++ cmake ninja-build python3 python3-pip git
 
 # 4.2 Este repositório
-git clone https://github.com/opinha/manet-ns3.git
+git clone https://github.com/gabbragadev/manet-ns3.git
 cd manet-ns3
 pip install -r requirements.txt
 
@@ -132,17 +140,19 @@ Para gravar o CSV, acrescente `--csv=arquivo.csv`. Para ver todos os parâmetros
 A partir da raiz deste repositório:
 
 ```bash
-NS3_DIR=~/ns-3 JOBS=2 scripts/run_batch.sh base       # etapa 1: 60 execuções
-NS3_DIR=~/ns-3 JOBS=2 scripts/run_batch.sh extensao   # etapa 2: 180 execuções
-NS3_DIR=~/ns-3 JOBS=2 scripts/run_batch.sh arp        # apoio: 60 execuções
+NS3_DIR=~/ns-3 JOBS=2 scripts/run_batch.sh base    # etapa 1: 120 execuções
+NS3_DIR=~/ns-3 JOBS=2 scripts/run_batch.sh nos     # etapa 2: 360 execuções
+NS3_DIR=~/ns-3 JOBS=2 scripts/run_batch.sh pausa   # etapa 3: 360 execuções
+NS3_DIR=~/ns-3 JOBS=2 scripts/run_batch.sh arp     # apoio: 120 execuções
 # ou tudo de uma vez:
 NS3_DIR=~/ns-3 JOBS=2 scripts/run_batch.sh tudo
 ```
 
 O script copia `src/manet-routing.cc` para `scratch/` do ns-3, compila e executa cada
 combinação. `JOBS` é o número de simulações em paralelo. Execuções que já têm CSV são
-puladas; `FORCE=1` refaz tudo. Tempo medido com `JOBS=2`: cerca de 4 minutos para a
-etapa 1 e 30 minutos para a etapa 2.
+puladas; `FORCE=1` refaz tudo; `RUNS=5` roda menos repetições. Tempo medido com
+`JOBS=2`: cerca de 8 minutos para a etapa 1, 55 para a etapa 2 (redes de 40 nós são as
+mais lentas) e 25 para a etapa 3.
 
 ### 5.3 Análise
 
@@ -152,7 +162,8 @@ python3 scripts/analyze.py
 
 Gera o relatório de validação, as tabelas em `data/processed/` e os gráficos em
 `figures/`. Opções: `--compare-speed` (velocidade do gráfico comparativo, padrão 20) e
-`--ext-speed` (velocidade do painel da variável adicional, padrão 10).
+`--ext-speed` (velocidade dos painéis das variáveis adicionais, padrão 10) e `--runs`
+(repetições esperadas por configuração, padrão 10).
 
 ## 6. Parâmetros da simulação
 
@@ -185,7 +196,7 @@ do experimento-base.
 ## 7. Aleatoriedade e repetições
 
 - **Seed mestre:** 12345, fixa em todas as execuções (`RngSeedManager::SetSeed`).
-- **Repetições:** `--run` de 1 a 5 (`RngSeedManager::SetRun`). Cada run usa subfluxos
+- **Repetições:** `--run` de 1 a 10 (`RngSeedManager::SetRun`). Cada run usa subfluxos
   independentes do gerador, que é o método recomendado pelo manual do ns-3.
 - **Mesma mobilidade para os três protocolos:** os streams aleatórios da posição inicial,
   dos destinos do Random Waypoint e do instante de início dos fluxos são fixados no código.
@@ -291,10 +302,10 @@ Para medir o efeito, a etapa 1 inteira foi repetida com o valor padrão
 
 | Velocidade | AODV 1 s / 100 s | OLSR 1 s / 100 s | DSDV 1 s / 100 s |
 |---|---|---|---|
-| 1 m/s | 97,7 / 89,1 | 97,3 / 97,3 | 96,5 / 96,5 |
-| 5 m/s | 91,8 / 89,1 | 86,0 / 84,9 | 79,2 / 78,3 |
-| 10 m/s | 89,8 / 74,5 | 73,3 / 65,0 | 68,1 / 59,2 |
-| 20 m/s | 86,6 / 74,0 | 57,9 / 54,7 | 56,2 / 52,3 |
+| 1 m/s | 96,0 / 92,2 | 97,3 / 97,3 | 96,0 / 95,4 |
+| 5 m/s | 93,8 / 87,9 | 87,6 / 85,7 | 81,8 / 79,6 |
+| 10 m/s | 92,3 / 79,4 | 75,1 / 69,3 | 71,7 / 64,2 |
+| 20 m/s | 87,5 / 72,6 | 59,6 / 55,0 | 57,9 / 52,5 |
 
 O ajuste melhora os três protocolos, mais o AODV, e reduz a variação entre execuções.
 A ordem entre os protocolos é a mesma com ou sem o ajuste.
@@ -308,6 +319,31 @@ Parâmetros padrão do ns-3.48, sem ajuste. Os que mais pesam na interpretação
 | AODV | reativo | HELLO a cada 1 s, 2 perdas toleradas, rota ativa por 3 s |
 | OLSR | proativo, estado de enlace | HELLO a cada 2 s, TC a cada 5 s |
 | DSDV | proativo, vetor de distância | atualização periódica a cada 15 s, assentamento de 5 s |
+
+### 8.7 Distribuição do atraso: média, mediana e percentil 95
+
+A média do atraso é dominada por poucos pacotes. Quando uma rota quebra, o AODV e o
+DSDV guardam os pacotes numa fila enquanto procuram outra rota (até 30 s no AODV), e os
+que chegam depois disso trazem segundos de atraso. Exemplo, AODV com 10 nós a 20 m/s,
+run 4: **mediana de 1,25 ms, média de 179 ms e percentil 95 de 1,1 s**. Por isso a média
+do atraso e o jitter variam tanto de uma execução para outra.
+
+Desde a versão 2 o programa registra também a mediana e o percentil 95 do atraso. O
+FlowMonitor guarda um histograma do atraso de cada fluxo; a largura dos bins foi ajustada
+para 0,1 ms (`DelayBinWidth`), e o programa lê os percentis desse histograma. Mediana =
+atraso típico de um pacote; percentil 95 = atraso dos 5% piores; média = o que o enunciado
+pede, sensível à cauda.
+
+### 8.8 Comparação pareada entre protocolos
+
+Em cada run os três protocolos veem exatamente o mesmo movimento e o mesmo tráfego
+(seção 7). Grande parte da variação entre runs vem da topologia sorteada (uma execução
+com origem e destino longe um do outro piora os três protocolos juntos). A diferença
+**AODV − OLSR no mesmo run** cancela esse efeito, e o intervalo de confiança da diferença
+fica bem mais estreito que o das médias separadas. `analyze.py` calcula essa diferença
+para os três pares, por configuração, com IC 95% (t de Student, 9 graus de liberdade), em
+`data/processed/diferencas_pareadas.csv`. Uma diferença é tratada como real quando o
+intervalo não inclui zero.
 
 ## 9. Validação do cenário
 
@@ -335,9 +371,9 @@ cd ~/ns-3
 ### 10.1 Dados brutos
 
 Um CSV por execução, com uma linha por fluxo:
-`data/raw/<etapa>/manet_<PROTOCOLO>_v<velocidade>_n<nós>_run<run>.csv`.
+`data/raw/<etapa>/manet_<PROTOCOLO>_v<velocidade>_n<nós>_p<pausa>_run<run>.csv`.
 O `batch.log` de cada etapa registra data e hora, versão do ns-3, protocolo, velocidade,
-nós, seed, run, situação e duração de cada execução.
+nós, pausa, seed, run, situação e duração de cada execução.
 
 | Coluna | Significado |
 |---|---|
@@ -351,6 +387,8 @@ nós, seed, run, situação e duração de cada execução.
 | `timesForwarded`, `avgHops` | encaminhamentos e saltos por pacote entregue (1 + encaminhamentos / recebidos) |
 | `timeFirstTxS`, `timeLastRxS` | instantes da primeira transmissão e da última recepção |
 | `runCtrlTxPackets`, `runCtrlTxBytes` | mensagens de controle do roteamento transmitidas por todos os nós na execução (valor repetido nas linhas da mesma execução) |
+| `delayP50Ms`, `delayP95Ms` | mediana e percentil 95 do atraso dos pacotes do fluxo (seção 8.7) |
+| `runDelayP50Ms`, `runDelayP95Ms` | o mesmo para todos os pacotes de dados da execução (valor repetido nas linhas da mesma execução) |
 | `routingTypeId` | protocolo realmente instalado |
 
 `delayMs` e `jitterMs` ficam como `nan` quando o fluxo não recebeu pacotes suficientes
@@ -363,12 +401,13 @@ para o cálculo.
 | `validacao.txt` | relatório de validação dos dados brutos |
 | `por_fluxo.csv` | todas as linhas brutas reunidas |
 | `por_execucao.csv` | métricas da rede em cada execução |
-| `estatisticas.csv` | média, mínimo, máximo, desvio-padrão amostral e IC 95% por configuração |
+| `estatisticas.csv` | média, mediana, mínimo, máximo, desvio-padrão amostral e IC 95% por configuração |
+| `diferencas_pareadas.csv` | diferença entre cada par de protocolos no mesmo run, com IC 95% (seção 8.8) |
 | `resumo.md` | as mesmas estatísticas em tabelas legíveis |
 | `apoio_arp_padrao_estatisticas.csv` | estatísticas da etapa de apoio (seção 8.5) |
 
-O intervalo de confiança de 95% usa a distribuição t de Student com 4 graus de liberdade
-(t = 2,776 para 5 repetições).
+O intervalo de confiança de 95% usa a distribuição t de Student com 9 graus de liberdade
+(t = 2,262 para 10 repetições).
 
 ### 10.3 Gráficos (`figures/`)
 
@@ -379,18 +418,22 @@ O intervalo de confiança de 95% usa a distribuição t de Student com 4 graus d
 | `fig3_delay_x_velocidade` | Atraso × velocidade |
 | `fig4_jitter_x_velocidade` | Jitter × velocidade |
 | `fig5_comparativo_v20` | comparativo agregado entre os protocolos a 20 m/s |
-| `fig6_extensao_nos_v10` | variável adicional: as 4 métricas × quantidade de nós a 10 m/s |
-| `fig7_extensao_pdr_x_velocidade` | variável adicional: PDR × velocidade para cada quantidade de nós |
+| `fig6_extensao_nos_v10` | variável adicional 1: as 4 métricas × quantidade de nós a 10 m/s |
+| `fig7_extensao_nos_pdr_x_velocidade` | variável adicional 1: PDR × velocidade para cada quantidade de nós |
+| `fig8_extensao_pausa_v10` | variável adicional 2: as 4 métricas × tempo de pausa a 10 m/s |
+| `fig9_extensao_pausa_pdr_x_velocidade` | variável adicional 2: PDR × velocidade para cada tempo de pausa |
+| `fig10_atraso_media_mediana_p95` | média, mediana e percentil 95 do atraso × velocidade (escala log) |
+| `fig11_diferencas_pareadas` | diferenças pareadas de PDR e throughput entre protocolos |
 | `painel_base` | figuras 1 a 4 em um único painel (economiza espaço no artigo) |
 | `apoio_controle_x_velocidade` | tráfego de controle do roteamento × velocidade |
 | `apoio_saltos_x_velocidade` | saltos por pacote entregue × velocidade |
 
-Todos têm uma série por protocolo, média de 5 execuções e barras de erro com IC 95%,
+Todos têm uma série por protocolo, média de 10 execuções e barras de erro com IC 95%,
 truncadas nos limites físicos da métrica (0 e, no PDR, 100%).
 
 ### 10.4 Artigo (`article/`)
 
-`analyze.py` também grava as três figuras do artigo (`article/figuras/`, no tamanho final
+`analyze.py` também grava as quatro figuras do artigo (`article/figuras/`, no tamanho final
 da página e sem título embutido) e as linhas da tabela de resultados
 (`article/tabela_base.tex`). Assim, todo número e todo gráfico do artigo sai dos CSVs
 brutos pelo mesmo script. Para compilar:
@@ -404,141 +447,193 @@ No Overleaf, basta enviar a pasta `article/` inteira e compilar `artigo.tex`.
 
 ## 11. Resultados da etapa 1 (experimento-base)
 
-Média ± IC 95% de 5 execuções, 20 nós. Mínimo, máximo e desvio-padrão de cada célula
-estão em `data/processed/resumo.md` e `data/processed/estatisticas.csv`.
+Média ± IC 95% de 10 execuções, 20 nós, pausa 0 s. Mediana, mínimo, máximo e
+desvio-padrão de cada célula estão em `data/processed/resumo.md` e
+`data/processed/estatisticas.csv`.
 
 **PDR (%)**
 
 | Velocidade (m/s) | AODV | OLSR | DSDV |
 |---|---|---|---|
-| 1 | 97,7 ± 3,1 | 97,3 ± 5,7 | 96,5 ± 7,7 |
-| 5 | 91,8 ± 10,8 | 86,0 ± 2,0 | 79,2 ± 3,6 |
-| 10 | 89,8 ± 4,5 | 73,3 ± 4,6 | 68,1 ± 5,0 |
-| 20 | 86,6 ± 4,4 | 57,9 ± 4,5 | 56,2 ± 2,0 |
+| 1 | 96,0 ± 5,7 | 97,3 ± 2,5 | 96,0 ± 3,3 |
+| 5 | 93,8 ± 5,2 | 87,6 ± 3,6 | 81,8 ± 4,9 |
+| 10 | 92,3 ± 2,7 | 75,1 ± 4,2 | 71,7 ± 5,4 |
+| 20 | 87,5 ± 2,8 | 59,6 ± 4,9 | 57,9 ± 4,8 |
+
+**Diferença pareada de PDR no mesmo run (pontos percentuais; * = intervalo não inclui zero)**
+
+| Velocidade (m/s) | AODV − OLSR | AODV − DSDV | OLSR − DSDV |
+|---|---|---|---|
+| 1 | -1,4 ± 5,9 | -0,1 ± 5,1 | 1,3 ± 1,9 |
+| 5 | 6,2 ± 5,4 * | 12,0 ± 6,6 * | 5,8 ± 2,5 * |
+| 10 | 17,1 ± 4,6 * | 20,6 ± 5,0 * | 3,5 ± 3,8 |
+| 20 | 27,9 ± 4,3 * | 29,6 ± 4,2 * | 1,7 ± 1,9 |
 
 **Throughput da rede (Mbps)**, carga oferecida de 0,673 Mbps
 
 | Velocidade (m/s) | AODV | OLSR | DSDV |
 |---|---|---|---|
-| 1 | 0,658 ± 0,021 | 0,655 ± 0,038 | 0,649 ± 0,052 |
-| 5 | 0,618 ± 0,073 | 0,579 ± 0,013 | 0,533 ± 0,024 |
-| 10 | 0,605 ± 0,030 | 0,494 ± 0,031 | 0,458 ± 0,033 |
-| 20 | 0,583 ± 0,030 | 0,390 ± 0,030 | 0,378 ± 0,013 |
+| 1 | 0,646 ± 0,038 | 0,655 ± 0,017 | 0,647 ± 0,022 |
+| 5 | 0,631 ± 0,035 | 0,590 ± 0,024 | 0,551 ± 0,033 |
+| 10 | 0,621 ± 0,018 | 0,506 ± 0,028 | 0,482 ± 0,037 |
+| 20 | 0,589 ± 0,019 | 0,401 ± 0,033 | 0,390 ± 0,032 |
 
 **Atraso médio fim a fim (ms)**
 
 | Velocidade (m/s) | AODV | OLSR | DSDV |
 |---|---|---|---|
-| 1 | 4,8 ± 2,2 | 5,5 ± 5,1 | 4,3 ± 2,5 |
-| 5 | 6,3 ± 4,5 | 11,5 ± 7,4 | 14,4 ± 11,0 |
-| 10 | 8,9 ± 5,3 | 16,0 ± 3,8 | 13,4 ± 12,0 |
-| 20 | 20,0 ± 17,3 | 17,9 ± 5,7 | 10,4 ± 5,9 |
+| 1 | 8,2 ± 5,1 | 6,5 ± 2,5 | 6,3 ± 1,9 |
+| 5 | 6,1 ± 2,9 | 10,1 ± 4,8 | 12,8 ± 7,0 |
+| 10 | 9,9 ± 4,4 | 14,2 ± 4,0 | 12,2 ± 5,7 |
+| 20 | 24,5 ± 15,8 | 20,0 ± 5,6 | 11,5 ± 3,9 |
+
+**Mediana do atraso (ms)**
+
+| Velocidade (m/s) | AODV | OLSR | DSDV |
+|---|---|---|---|
+| 1 | 2,78 ± 1,42 | 2,87 ± 1,38 | 2,68 ± 1,30 |
+| 5 | 1,77 ± 0,83 | 1,65 ± 0,56 | 1,78 ± 0,85 |
+| 10 | 1,99 ± 1,08 | 1,65 ± 0,62 | 1,48 ± 0,52 |
+| 20 | 2,50 ± 1,40 | 1,64 ± 0,77 | 1,45 ± 0,66 |
 
 **Jitter médio (ms)**
 
 | Velocidade (m/s) | AODV | OLSR | DSDV |
 |---|---|---|---|
-| 1 | 1,8 ± 1,2 | 2,7 ± 3,7 | 2,0 ± 1,8 |
-| 5 | 3,2 ± 1,8 | 3,4 ± 1,7 | 3,5 ± 1,8 |
-| 10 | 4,6 ± 2,8 | 6,8 ± 3,6 | 4,9 ± 2,3 |
-| 20 | 6,6 ± 1,2 | 7,1 ± 2,7 | 4,6 ± 2,1 |
+| 1 | 2,8 ± 1,6 | 2,7 ± 1,7 | 2,8 ± 1,1 |
+| 5 | 3,0 ± 1,5 | 3,4 ± 2,0 | 3,8 ± 1,7 |
+| 10 | 4,5 ± 2,0 | 6,1 ± 2,2 | 4,3 ± 1,4 |
+| 20 | 7,0 ± 2,8 | 8,0 ± 2,6 | 5,3 ± 1,5 |
 
 ![Painel do experimento-base](figures/painel_base.png)
 
 ![Comparativo a 20 m/s](figures/fig5_comparativo_v20.png)
 
+![Diferenças pareadas](figures/fig11_diferencas_pareadas.png)
+
+![Média, mediana e percentil 95 do atraso](figures/fig10_atraso_media_mediana_p95.png)
+
 O que os dados mostram:
 
-- **A 1 m/s os três protocolos empatam** (PDR entre 96% e 98%, intervalos sobrepostos).
-- **O PDR cai com a velocidade nos três, mas em intensidades muito diferentes.** De 1 para
-  20 m/s o AODV perde cerca de 11 pontos percentuais; OLSR e DSDV perdem cerca de 40.
+- **A 1 m/s os três protocolos empatam** (PDR de 96% a 97%; as diferenças pareadas
+  incluem zero).
+- **O PDR cai com a velocidade nos três, em intensidades muito diferentes.** De 1 para
+  20 m/s o AODV perde 8,5 pontos percentuais; OLSR e DSDV perdem 37,7 e 38,2. No mesmo run,
+  o AODV entrega 27,9 ± 4,3 p.p. a mais que o OLSR a 20 m/s. Entre OLSR e DSDV só há
+  diferença significativa a 5 m/s.
 - **O throughput acompanha o PDR**, como esperado em tráfego UDP de taxa constante.
-- **Atraso e jitter crescem com a velocidade**, mas os intervalos de confiança são largos
-  e se sobrepõem entre protocolos. Não há base para ordenar os protocolos nessas duas
-  métricas.
-- **Não há um ponto de ruptura brusco.** Em OLSR e DSDV a maior queda por m/s acontece
-  entre 1 e 5 m/s e depois a degradação segue gradual.
-- **Dados de apoio que ajudam a explicar a diferença:** o tráfego de controle do AODV
-  dobra de 1 para 20 m/s (de 10,8 para 21,5 kbps), enquanto o de OLSR e DSDV cresce pouco
-  (de 11,7 para 15,3 e de 12,6 para 13,8 kbps, `apoio_controle_x_velocidade`). E os pacotes que OLSR e DSDV conseguem entregar em
-  alta velocidade percorrem menos saltos (de 1,6 para 1,3 a 1,4), enquanto no AODV o
-  número de saltos se mantém em 1,7 (`apoio_saltos_x_velocidade`). Isso é compatível com
-  o AODV refazendo rotas assim que elas quebram e com os proativos mantendo rotas velhas
-  até a próxima atualização periódica.
+- **Não há ruptura brusca.** Nos proativos a queda é mais rápida até 10 m/s (2 a 3,6 p.p.
+  por m/s) e mais lenta entre 10 e 20 m/s (cerca de 1,5 p.p. por m/s).
+- **A média do atraso cresce, a mediana não.** A média do AODV vai de 8,2 para 24,5 ms e a
+  do OLSR de 6,5 para 20,0 ms, mas a mediana fica entre 1,5 e 3 ms em todos os casos. A
+  média é puxada pelos pacotes que esperam numa fila enquanto o protocolo procura outra
+  rota (seção 8.7). Isso explica a variação grande da média e do jitter entre execuções.
+- **Dados de apoio:** o tráfego de controle do AODV quase dobra de 1 para 20 m/s (11,4 para
+  22,0 kbps), enquanto o de OLSR e DSDV cresce pouco (11,7 para 15,2 e 12,5 para 13,8 kbps).
+  Os pacotes que OLSR e DSDV entregam a 20 m/s percorrem menos saltos (1,42 e 1,29, contra
+  1,70 no AODV). Isso é compatível com o AODV refazendo rotas assim que elas quebram e com
+  os proativos usando rotas velhas até a próxima atualização periódica.
 
 **Condição escolhida para o comparativo agregado (figura 5): 20 m/s.** É o nível de maior
 mobilidade e onde a diferença entre os protocolos é maior em relação à variação entre
-execuções: os intervalos de PDR e throughput do AODV não se sobrepõem aos de OLSR e DSDV.
+execuções.
 
-## 12. Resultados da etapa 2 (variável adicional: quantidade de nós)
+## 12. Resultados da etapa 2 (variável adicional 1: quantidade de nós)
 
 **Por que essa variável:** com a área fixa em 500 × 500 m, a quantidade de nós define a
 densidade da rede, que atua nos dois sentidos. Mais nós dão mais caminhos alternativos
 quando um enlace quebra, mas também mais mensagens de controle e mais disputa pelo canal.
-Foram usados 10, 20, 30 e 40 nós, com as 4 velocidades, os 3 protocolos e 5 repetições.
-Todo o resto é igual à etapa 1. O ponto de 20 nós é a própria etapa 1.
-
-**PDR (%) a 10 m/s**
-
-| Nós | AODV | OLSR | DSDV |
-|---|---|---|---|
-| 10 | 86,1 ± 13,0 | 72,7 ± 18,0 | 72,8 ± 14,9 |
-| 20 | 89,8 ± 4,5 | 73,3 ± 4,6 | 68,1 ± 5,0 |
-| 30 | 84,8 ± 8,2 | 73,7 ± 8,0 | 68,4 ± 9,3 |
-| 40 | 77,7 ± 5,2 | 77,1 ± 6,0 | 71,5 ± 9,2 |
+Foram usados 10, 20, 30 e 40 nós, com pausa 0 s. O ponto de 20 nós é a própria etapa 1.
 
 **PDR (%) a 20 m/s**
 
 | Nós | AODV | OLSR | DSDV |
 |---|---|---|---|
-| 10 | 83,1 ± 9,5 | 58,1 ± 13,6 | 56,1 ± 12,0 |
-| 20 | 86,6 ± 4,4 | 57,9 ± 4,5 | 56,2 ± 2,0 |
-| 30 | 80,7 ± 4,3 | 59,8 ± 6,0 | 59,2 ± 7,1 |
-| 40 | 79,7 ± 5,4 | 65,5 ± 6,3 | 65,2 ± 7,5 |
+| 10 | 82,0 ± 5,7 | 55,2 ± 7,0 | 55,4 ± 5,6 |
+| 20 | 87,5 ± 2,8 | 59,6 ± 4,9 | 57,9 ± 4,8 |
+| 30 | 80,1 ± 2,9 | 60,4 ± 5,6 | 57,4 ± 5,2 |
+| 40 | 75,3 ± 4,9 | 65,4 ± 3,9 | 64,2 ± 5,0 |
 
 **PDR (%) a 1 m/s**
 
 | Nós | AODV | OLSR | DSDV |
 |---|---|---|---|
-| 10 | 83,6 ± 26,7 | 81,3 ± 30,8 | 80,8 ± 27,8 |
-| 20 | 97,7 ± 3,1 | 97,3 ± 5,7 | 96,5 ± 7,7 |
-| 30 | 95,9 ± 6,3 | 97,1 ± 4,5 | 95,7 ± 6,1 |
-| 40 | 86,0 ± 8,6 | 96,2 ± 3,3 | 96,8 ± 1,6 |
+| 10 | 86,4 ± 11,7 | 83,6 ± 12,9 | 84,0 ± 12,3 |
+| 20 | 96,0 ± 5,7 | 97,3 ± 2,5 | 96,0 ± 3,3 |
+| 30 | 94,6 ± 3,8 | 96,5 ± 2,5 | 95,9 ± 2,7 |
+| 40 | 87,7 ± 5,2 | 96,3 ± 1,8 | 96,6 ± 2,0 |
 
 **Tráfego de controle (kbps) a 10 m/s**
 
 | Nós | AODV | OLSR | DSDV |
 |---|---|---|---|
-| 10 | 5,8 ± 0,5 | 4,5 ± 0,2 | 3,0 ± 0,2 |
-| 20 | 16,2 ± 3,3 | 14,3 ± 0,3 | 13,6 ± 0,2 |
-| 30 | 52,1 ± 9,3 | 28,4 ± 0,5 | 31,7 ± 0,4 |
-| 40 | 101,1 ± 12,3 | 47,9 ± 1,3 | 57,2 ± 0,8 |
+| 10 | 5,9 ± 0,4 | 4,5 ± 0,1 | 3,0 ± 0,1 |
+| 20 | 15,5 ± 2,0 | 14,4 ± 0,1 | 13,7 ± 0,1 |
+| 30 | 51,3 ± 5,7 | 28,6 ± 0,3 | 31,6 ± 0,2 |
+| 40 | 103,4 ± 7,9 | 48,0 ± 0,7 | 57,3 ± 0,3 |
 
-![Variável adicional a 10 m/s](figures/fig6_extensao_nos_v10.png)
+![Variável adicional 1 a 10 m/s](figures/fig6_extensao_nos_v10.png)
 
-![PDR por quantidade de nós](figures/fig7_extensao_pdr_x_velocidade.png)
+![PDR por quantidade de nós](figures/fig7_extensao_nos_pdr_x_velocidade.png)
 
 O que os dados mostram:
 
-- **A tendência da etapa 1 se confirma em todas as densidades:** o PDR de OLSR e DSDV cai
-  com a velocidade com 10, 20, 30 ou 40 nós.
-- **A densidade muda a distância entre os protocolos.** Com mais nós, OLSR e DSDV melhoram
-  em alta velocidade (a 20 m/s, de cerca de 57% com 20 nós para 65% com 40) e o AODV piora
-  (de 87% para 80%). A 10 m/s com 40 nós os três ficam dentro do mesmo intervalo.
-- **O custo do AODV cresce muito mais rápido com a densidade:** o tráfego de controle a
-  10 m/s vai de 16 kbps com 20 nós para 101 kbps com 40, contra 48 kbps do OLSR e 57 kbps
-  do DSDV. O jitter do AODV acompanha (de 4,6 para 17,0 ms).
+- **A queda de OLSR e DSDV com a velocidade aparece em todas as densidades.**
+- **A densidade reduz a vantagem do AODV.** A 20 m/s, de 20 para 40 nós, o AODV cai de
+  87,5% para 75,3% e o OLSR sobe de 59,6% para 65,4%.
 - **Em rede densa e quase parada a ordem se inverte:** a 1 m/s com 40 nós, o AODV entrega
-  86% e os proativos 96% a 97%.
-- **Com 10 nós a rede é esparsa demais:** a 1 m/s o PDR médio fica perto de 82% com
-  intervalo de ±27 a ±31 pontos, porque em algumas execuções há fluxos sem caminho durante
-  boa parte da simulação (no run 3, três dos quatro fluxos entregam entre 10% e 31% nos
-  três protocolos). Esse ponto mede mais a conectividade do que o roteamento.
+  87,7% e os proativos acima de 96% (diferença pareada de cerca de −9 p.p., significativa).
+- **O custo do AODV cresce muito mais rápido com a densidade:** a 10 m/s o controle vai de
+  15,5 kbps com 20 nós para 103 kbps com 40, contra 48 kbps do OLSR e 57 kbps do DSDV. O
+  jitter do AODV acompanha (18,6 ms com 40 nós).
+- **Com 10 nós a rede é esparsa:** o intervalo de confiança passa de ±12 p.p. a 1 m/s,
+  porque há pares sem caminho durante boa parte da simulação (3 fluxos, em 3.360, não
+  receberam nenhum pacote). Esse ponto mede mais a conectividade do que o roteamento.
 
-## 13. Limitações
+## 13. Resultados da etapa 3 (variável adicional 2: tempo de pausa)
 
-- Cinco repetições dão intervalos de confiança largos, principalmente em atraso e jitter.
-  Diferenças menores que as barras de erro não devem ser tratadas como diferenças reais.
+**Por que essa variável:** no Random Waypoint, cada nó para no destino pelo tempo de pausa
+antes de seguir. Com pausa maior, os nós passam mais tempo parados e a mobilidade efetiva
+cai sem mudar a velocidade. É o par clássico da velocidade nos estudos de referência
+(Broch et al. 1998). Foram usados 0, 10, 30 e 60 s, com 20 nós. O ponto de 0 s é a etapa 1.
+
+**PDR (%) a 20 m/s**
+
+| Pausa (s) | AODV | OLSR | DSDV |
+|---|---|---|---|
+| 0 | 87,5 ± 2,8 | 59,6 ± 4,9 | 57,9 ± 4,8 |
+| 10 | 81,6 ± 4,8 | 60,1 ± 7,0 | 57,8 ± 7,2 |
+| 30 | 88,5 ± 5,5 | 77,5 ± 6,7 | 73,2 ± 7,0 |
+| 60 | 92,9 ± 4,9 | 88,0 ± 4,9 | 85,6 ± 5,4 |
+
+**PDR (%) a 10 m/s**
+
+| Pausa (s) | AODV | OLSR | DSDV |
+|---|---|---|---|
+| 0 | 92,3 ± 2,7 | 75,1 ± 4,2 | 71,7 ± 5,4 |
+| 10 | 88,0 ± 5,5 | 76,5 ± 6,6 | 68,4 ± 9,6 |
+| 30 | 91,3 ± 4,2 | 80,7 ± 6,3 | 75,0 ± 6,1 |
+| 60 | 90,4 ± 4,5 | 88,0 ± 3,6 | 84,7 ± 3,4 |
+
+![Variável adicional 2 a 10 m/s](figures/fig8_extensao_pausa_v10.png)
+
+![PDR por tempo de pausa](figures/fig9_extensao_pausa_pdr_x_velocidade.png)
+
+O que os dados mostram:
+
+- **A pausa confirma que o fator é a mobilidade efetiva.** A 20 m/s, de 0 para 60 s de
+  pausa, OLSR e DSDV sobem de 59,6% e 57,9% para 88,0% e 85,6%, e o AODV de 87,5% para
+  92,9%. A diferença pareada AODV − OLSR cai de 27,9 para 4,9 p.p.
+- **Pausa de 10 s quase não muda o quadro;** o efeito aparece a partir de 30 s.
+- **O controle do AODV cai quase pela metade com a pausa** (a 20 m/s, de 22,0 para
+  11,9 kbps), bem mais que o do OLSR (15,2 para 11,8) e o do DSDV (13,8 para 12,1): o custo
+  do AODV acompanha as quebras de rota.
+
+## 14. Limitações
+
+- Dez repetições ainda deixam intervalos largos na média do atraso e no jitter, que são
+  dominados por poucos pacotes muito atrasados (seção 8.7). Diferenças menores que as
+  barras de erro não devem ser tratadas como diferenças reais.
 - Atraso e jitter só consideram pacotes entregues. Um protocolo que perde os pacotes das
   rotas mais longas pode parecer mais rápido por isso.
 - No modelo Wi-Fi usado, o alcance de detecção de portadora é igual ao alcance de
@@ -551,12 +646,12 @@ O que os dados mostram:
 - Os resultados valem para os parâmetros padrão dos protocolos no ns-3.48 e para este
   cenário. Não sustentam afirmações gerais do tipo "o protocolo X é o melhor".
 
-## 14. Rastreabilidade
+## 15. Rastreabilidade
 
 Versão do repositório correspondente ao artigo entregue: commit `PREENCHER`
 (ou tag `entrega-artigo`).
 
-## 15. Referências
+## 16. Referências
 
 - ns-3 Tutorial: https://www.nsnam.org/docs/tutorial/html/
 - ns-3 Manual, Random Variables: https://www.nsnam.org/docs/manual/html/random-variables.html

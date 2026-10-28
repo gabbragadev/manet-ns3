@@ -1,4 +1,4 @@
-[OK] cada configuração tem 5 repetições (48 configurações, 240 execuções)
+[OK] cada configuração tem 10 repetições (84 configurações, 840 execuções)
 [OK] cada execução tem uma linha por fluxo
 [OK] pacotes gerados por fluxo = taxa × duração útil (1800 pacotes)
 [OK] recebidos ≤ transmitidos na camada IP ≤ gerados pela aplicação
@@ -9,8 +9,8 @@
 [OK] jitter não negativo em todo fluxo com mais de um pacote recebido
 [OK] nenhuma recepção depois do fim da simulação
 [OK] protocolo instalado confere com o protocolo pedido
+[OK] mediana do atraso ≤ percentil 95 em todo fluxo com recepção
 [OK] parâmetro constante areaSide = 500.0
-[OK] parâmetro constante pause = 0.0
 [OK] parâmetro constante pktSize = 1024
 [OK] parâmetro constante packetRate = 20.0
 [OK] parâmetro constante txPowerDbm = 4.0
@@ -20,5 +20,9 @@
 [OK] parâmetro constante appStop = 110.0
 [OK] parâmetro constante seed = 12345
 [OK] parâmetro constante flows = 4
-[INFO] fluxos sem nenhuma recepção: 0 de 960 (entram no PDR e no throughput como zero; não entram no atraso nem no jitter)
+[INFO] fluxos sem nenhuma recepção: 3 de 3360 (entram no PDR e no throughput como zero; não entram no atraso nem no jitter)
+protocol  speed  nodes  pause
+AODV      1.0    10     0.0      1
+DSDV      1.0    10     0.0      1
+OLSR      1.0    10     0.0      1
 RESULTADO: 0 problema(s) encontrado(s)

@@ -122,7 +122,40 @@ struct FlowResult
     double jitterSumS{0.0};
     double timeFirstTxS{std::numeric_limits<double>::quiet_NaN()};
     double timeLastRxS{std::numeric_limits<double>::quiet_NaN()};
+    std::map<uint64_t, uint64_t> delayBins; // histograma do atraso: bin -> pacotes
 };
+
+// Largura dos bins do histograma de atraso do FlowMonitor (s).
+const double DELAY_BIN_WIDTH = 0.0001;
+
+/**
+ * Percentil (0 a 1) de um histograma de atraso, em ms, pelo ponto medio do bin.
+ * Devolve NaN quando o histograma esta vazio.
+ */
+double
+DelayPercentileMs(const std::map<uint64_t, uint64_t>& bins, double q)
+{
+    uint64_t total = 0;
+    for (const auto& [bin, count] : bins)
+    {
+        total += count;
+    }
+    if (total == 0)
+    {
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+    const double target = q * total;
+    uint64_t acc = 0;
+    for (const auto& [bin, count] : bins)
+    {
+        acc += count;
+        if (acc >= target)
+        {
+            return 1e3 * (bin + 0.5) * DELAY_BIN_WIDTH;
+        }
+    }
+    return 1e3 * (bins.rbegin()->first + 0.5) * DELAY_BIN_WIDTH;
+}
 
 } // namespace
 
@@ -383,6 +416,8 @@ main(int argc, char* argv[])
     // 7. FlowMonitor
     // ------------------------------------------------------------------
     FlowMonitorHelper flowmonHelper;
+    // Histograma de atraso com bins de 0,1 ms, para calcular mediana e percentil 95.
+    flowmonHelper.SetMonitorAttribute("DelayBinWidth", DoubleValue(DELAY_BIN_WIDTH));
     Ptr<FlowMonitor> monitor = flowmonHelper.InstallAll();
 
     if (!mobilityTraceFile.empty())
@@ -423,6 +458,14 @@ main(int argc, char* argv[])
         r.timesForwarded += st.timesForwarded;
         r.delaySumS += st.delaySum.GetSeconds();
         r.jitterSumS += st.jitterSum.GetSeconds();
+        for (uint32_t b = 0; b < st.delayHistogram.GetNBins(); ++b)
+        {
+            const uint32_t count = st.delayHistogram.GetBinCount(b);
+            if (count > 0)
+            {
+                r.delayBins[b] += count;
+            }
+        }
         if (st.txPackets > 0)
         {
             r.timeFirstTxS = st.timeFirstTxPacket.GetSeconds();
@@ -458,6 +501,18 @@ main(int argc, char* argv[])
     double totalJitter = 0.0;
     uint64_t totalJitterSamples = 0;
 
+    // Histograma da execucao inteira (todos os fluxos de dados juntos).
+    std::map<uint64_t, uint64_t> runBins;
+    for (const auto& r : results)
+    {
+        for (const auto& [bin, count] : r.delayBins)
+        {
+            runBins[bin] += count;
+        }
+    }
+    const double runP50 = DelayPercentileMs(runBins, 0.50);
+    const double runP95 = DelayPercentileMs(runBins, 0.95);
+
     if (!quiet)
     {
         std::cout << "protocolo=" << protocol << " (" << routingTypeId << ") velocidade=" << speed
@@ -477,6 +532,8 @@ main(int argc, char* argv[])
         const double jitterMs = r.rxPackets > 1 ? 1e3 * r.jitterSumS / (r.rxPackets - 1) : nan;
         const double avgHops =
             r.rxPackets > 0 ? 1.0 + static_cast<double>(r.timesForwarded) / r.rxPackets : nan;
+        const double delayP50Ms = DelayPercentileMs(r.delayBins, 0.50);
+        const double delayP95Ms = DelayPercentileMs(r.delayBins, 0.95);
 
         totalAppTx += r.appTxPackets;
         totalRx += r.rxPackets;
@@ -493,7 +550,8 @@ main(int argc, char* argv[])
              << "," << r.ipTxPackets << "," << r.rxPackets << "," << lost << "," << r.rxBytes << ","
              << throughputMbps << "," << pdrPct << "," << delayMs << "," << jitterMs << ","
              << r.timesForwarded << "," << avgHops << "," << r.timeFirstTxS << "," << r.timeLastRxS
-             << "," << g_ctrlTxPackets << "," << g_ctrlTxBytes << "," << routingTypeId << "\n";
+             << "," << g_ctrlTxPackets << "," << g_ctrlTxBytes << "," << delayP50Ms << "," << delayP95Ms
+             << "," << runP50 << "," << runP95 << "," << routingTypeId << "\n";
 
         if (!quiet)
         {
@@ -515,7 +573,7 @@ main(int argc, char* argv[])
                "appStart,appStop,seed,run,flowId,srcNode,dstNode,dstPort,appTxPackets,ipTxPackets,"
                "rxPackets,lostPackets,rxBytes,throughputMbps,pdrPct,delayMs,jitterMs,"
                "timesForwarded,avgHops,timeFirstTxS,timeLastRxS,runCtrlTxPackets,runCtrlTxBytes,"
-               "routingTypeId\n";
+               "delayP50Ms,delayP95Ms,runDelayP50Ms,runDelayP95Ms,routingTypeId\n";
         out << rows.str();
     }
 
@@ -529,7 +587,8 @@ main(int argc, char* argv[])
                   << std::setprecision(2) << (totalRx > 0 ? 1e3 * totalDelay / totalRx : nan)
                   << " ms jitter="
                   << (totalJitterSamples > 0 ? 1e3 * totalJitter / totalJitterSamples : nan)
-                  << " ms controle=" << g_ctrlTxPackets << " pacotes (" << g_ctrlTxBytes << " bytes)\n";
+                  << " ms (mediana " << runP50 << " ms, p95 " << runP95
+                  << " ms) controle=" << g_ctrlTxPackets << " pacotes (" << g_ctrlTxBytes << " bytes)\n";
     }
 
     Simulator::Destroy();
