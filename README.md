@@ -648,8 +648,12 @@ O que os dados mostram:
 
 ## 15. Rastreabilidade
 
-Versão do repositório correspondente ao artigo entregue: commit `PREENCHER`
-(ou tag `entrega-artigo`).
+| Versão | Commit | Conteúdo |
+|---|---|---|
+| 1 (entrega de 15/10/2026) | `b0e2518` | 5 repetições, variável adicional: quantidade de nós |
+| 2 (apresentação) | `18763cf` | 10 repetições, segunda variável adicional (tempo de pausa), mediana e percentil 95 do atraso, diferenças pareadas |
+
+Para ver exatamente o que mudou entre as versões: `git diff b0e2518 18763cf --stat`.
 
 ## 16. Referências
 
